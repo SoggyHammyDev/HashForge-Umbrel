@@ -1,0 +1,54 @@
+name: Lint and test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: ShellCheck
+        run: shellcheck tests/smoke.sh tools/official-package.sh
+
+      - name: Fetch Umbrel's app linter
+        run: |
+          git clone --depth 1 https://github.com/getumbrel/umbrel-apps.git "$RUNNER_TEMP/umbrel-apps"
+          npm --prefix "$RUNNER_TEMP/umbrel-apps" install --no-audit --no-fund
+
+      - name: Lint the package as the official store would see it
+        # Umbrel's linter also checks that every image can be pulled without a login and exists for
+        # both Intel/AMD and ARM, and that no port clashes with another app in the store.
+        run: |
+          tools/official-package.sh "$RUNNER_TEMP/umbrel-apps"
+          cd "$RUNNER_TEMP/umbrel-apps"
+          npm run lint:apps -- hashforge --check-images
+
+  smoke:
+    name: Package starts
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Build a stand-in for the Bitcoin Node app
+        run: docker build --tag hashforge-bitcoind "https://github.com/owenashurst/HashForge.git#main:docker/bitcoind"
+
+      - name: Smoke test
+        run: tests/smoke.sh
