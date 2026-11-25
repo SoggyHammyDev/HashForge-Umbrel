@@ -1,0 +1,24 @@
+# Stands in for the parts of umbrelOS the package relies on, so the package's own compose file can be
+# started on any machine with Docker. It is a rough check, not a substitute for testing on an Umbrel.
+
+services:
+  # umbrelOS replaces this service with its own proxy; here it only has to exist.
+  app_proxy:
+    image: busybox:1.37
+    command: ["sleep", "infinity"]
+
+  # Stands in for the Bitcoin Node app, on a private chain that needs no synchronising.
+  bitcoin:
+    image: ${SMOKE_BITCOIN_IMAGE}
+    environment:
+      NETWORK: regtest
+      PRUNE_MB: 0
+      RPC_USER: ${APP_BITCOIN_RPC_USER}
+      RPC_PASSWORD: ${APP_BITCOIN_RPC_PASS}
+
+  pool:
+    # Under umbrelOS the web interface is reached through its proxy; here it is published for the checks.
+    # This replaces the package's Stratum ports rather than adding to them, so the test can run on a
+    # machine that already has a pool listening on those ports. The checks reach Stratum from inside.
+    ports: !override
+      - "127.0.0.1:${SMOKE_WEB_PORT}:8080"
