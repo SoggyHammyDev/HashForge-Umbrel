@@ -34,6 +34,9 @@ if [ "${SMOKE_MANAGED_SETUP:-0}" = 1 ]; then
     files+=(--file "tests/managed-setup.yml")
     export APP_HASHFORGE_POOL_SETUP_TOKEN="test-only-setup-token-with-at-least-32-characters"
 fi
+if [ "${SMOKE_WORKER_IMPORT:-0}" = 1 ]; then
+    files+=(--file "tests/worker-import.yml")
+fi
 if [ -n "$pool_image" ]; then
     override="tests/.pool-image.yml"
     printf 'services:\n  pool:\n    image: %s\n' "$pool_image" > "$override"
@@ -50,6 +53,7 @@ in_data_folder() {
 }
 
 cleanup() {
+    docker rm -f "hashforge-source-$" >/dev/null 2>&1 || true
     compose down --volumes --remove-orphans > /dev/null 2>&1 || true
     in_data_folder "rm -rf $data" > /dev/null 2>&1 || true
 }
@@ -77,19 +81,61 @@ wait_for_pool() {
 # umbrelOS hands the app its data folders owned by user 1000, which is who the services run as.
 in_data_folder "mkdir -p $data/data/pool $data/data/postgres $data/data/redis $data/data/bitcoin $data/data/setup && chown -R 1000:1000 $data"
 
+if [ "${SMOKE_WORKER_IMPORT:-0}" = 1 ]; then
+    in_data_folder "mkdir -p $data/data/source $data/data/destination $data/data/requests $data/data/status && ln -s bitcoin $data/data/destination/regtest && chown -R 1000:1000 $data/data/source $data/data/destination $data/data/requests $data/data/status"
+    docker run -d --name "hashforge-source-$" --network none --user 1000:1000 -e NETWORK=regtest -e PRUNE_MB=0 -e RPC_USER=test -e RPC_PASSWORD=local-test-only -v "$data/data/source:/data" hashforge-managed-bitcoind:ci >/dev/null
+    source_rpc() {
+        docker exec "hashforge-source-$" bitcoin-cli -regtest -datadir=/data -rpcport=8332 -rpcuser=test -rpcpassword=local-test-only "$@"
+    }
+    for _ in $(seq 1 90); do
+        if source_rpc getblockcount >/dev/null 2>&1; then break; fi
+        sleep 2
+    done
+    source_rpc generatetodescriptor 110 'pk(0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798)' >/dev/null
+    source_tip="$(source_rpc getbestblockhash)"
+    docker stop -t 120 "hashforge-source-$" >/dev/null
+    [ "$(docker inspect -f '{{.State.ExitCode}}' "hashforge-source-$")" = 0 ] || fail "Source did not shut down cleanly"
+    source_hash() {
+        in_data_folder "cd $data/data/source/regtest && find blocks chainstate -type f | sort | xargs sha256sum"
+    }
+    before="$(source_hash)"
+fi
+
 started="$(compose up --detach --build 2>&1)" || fail "the services did not start: $started"
 echo "Waiting for the pool to answer on port ${SMOKE_WEB_PORT}"
 wait_for_pool || fail "the pool did not answer within three minutes"
 
 if [ "${SMOKE_MANAGED_SETUP:-0}" = 1 ]; then
     [ -z "$(in_data_folder "ls -A $data/data/bitcoin")" ] || fail "Bitcoin wrote data before setup approval"
-    python3 tests/approve_web_setup.py "http://127.0.0.1:${SMOKE_WEB_PORT}/admin/node-setup" "$APP_HASHFORGE_POOL_SETUP_TOKEN" || fail "Web setup approval failed"
-    [ "$(in_data_folder "cat $data/data/setup/decision")" = fresh ] || fail "Setup decision was not persisted"
+    mode=fresh
+    args=()
+    if [ "${SMOKE_WORKER_IMPORT:-0}" = 1 ]; then
+        mode=imported
+        args+=(imported)
+        [ "$(in_data_folder "test ! -e $data/data/destination/bitcoin && echo absent")" = absent ] || fail "Destination exists before approval"
+    fi
+    python3 tests/approve_web_setup.py "http://127.0.0.1:${SMOKE_WEB_PORT}/admin/node-setup" "$APP_HASHFORGE_POOL_SETUP_TOKEN" "${args[@]}" || fail "Web setup approval failed"
+    for _ in $(seq 1 90); do
+        if [ "$(in_data_folder "cat $data/data/setup/decision 2>/dev/null" || true)" = "$mode" ]; then break; fi
+        sleep 2
+    done
+    [ "$(in_data_folder "cat $data/data/setup/decision")" = "$mode" ] || fail "Setup decision was not persisted"
     for _ in $(seq 1 90); do
         if compose exec -T bitcoin healthcheck.sh; then break; fi
         sleep 2
     done
     compose exec -T bitcoin healthcheck.sh || fail "Bitcoin did not start after approval"
+    if [ "${SMOKE_WORKER_IMPORT:-0}" = 1 ]; then
+        destination_rpc() {
+            compose exec -T bitcoin bitcoin-cli -regtest -datadir=/data -rpcport=8332 -rpcuser=hashforge -rpcpassword="$APP_HASHFORGE_POOL_RPC_PASSWORD" "$@"
+        }
+        [ "$(destination_rpc getblockcount)" = 110 ] || fail "Imported height differs"
+        [ "$(destination_rpc getbestblockhash)" = "$source_tip" ] || fail "Imported tip differs"
+        [ "$(destination_rpc verifychain 4 0)" = true ] || fail "Imported chain did not verify"
+        destination_rpc generatetodescriptor 1 'pk(0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798)' >/dev/null
+        [ "$(destination_rpc getblockcount)" = 111 ] || fail "Independent block generation failed"
+        [ "$(source_hash)" = "$before" ] || fail "Source files changed"
+    fi
 fi
 
 # The node must have exactly one network, distinct from the shared app network.
@@ -142,5 +188,14 @@ keys_after="$(in_data_folder "ls $data/data/pool/.aspnet/DataProtection-Keys")"
 [ "$keys_before" = "$keys_after" ] || fail "the pool's keys changed over a restart"
 logs="$(compose logs pool 2>&1)"
 grep --quiet --ignore-case "Database schema is up to date" <<< "$logs" || fail "the pool did not find its database after the restart"
+
+if [ "${SMOKE_WORKER_IMPORT:-0}" = 1 ]; then
+    for _ in $(seq 1 90); do
+        if [ "$(destination_rpc getblockcount 2>/dev/null || true)" = 111 ]; then break; fi
+        sleep 2
+    done
+    [ "$(destination_rpc getblockcount)" = 111 ] || fail "Imported chain did not persist"
+    [ "$(source_hash)" = "$before" ] || fail "Source changed after restart"
+fi
 
 echo "Smoke test passed"

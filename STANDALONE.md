@@ -5,3 +5,7 @@ Do not deploy to production yet. This branch uses a local Bitcoin Core image bui
 ## Managed setup experiment
 
 CI builds a pinned revision of our core fork and applies tests/managed-setup.yml only to disposable regtest data. It starts the web interface while Bitcoin Core waits, checks the Bitcoin data directory remains empty, submits the real setup form with an invalid and valid authorization code, then verifies Core starts and persists across restart. The override deliberately uses test-only networking and credentials; do not deploy it as an Umbrel app. The production package still uses the upstream pool image. Browser imports remain disabled; do not run a host import concurrently with a browser fresh-sync approval. Production setup needs stronger authorization, storage/lifecycle coordination and verified image digests.
+
+## Restricted worker integration test
+
+The additional disposable regtest job mounts the stopped source chain read-only, uses a networkless unprivileged worker with a read-only root filesystem, and gives the web container only request-write/status-read mounts. It checks imported tip and height, verifies the chain, generates one more block using Core RPC, and checks source checksums and persistence. The regtest-only destination symlink adapts the worker's fixed directory name to Core's regtest layout; it is not a mainnet deployment configuration. This test does not exercise actual Stratum block submission. No production app configuration is changed.

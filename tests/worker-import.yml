@@ -1,0 +1,31 @@
+# Disposable regtest only. Apply after managed-setup.yml.
+services:
+  bitcoin:
+    user: "1000:1000"
+    volumes: !override
+      - ${APP_DATA_DIR}/data/destination:/data
+      - ${APP_DATA_DIR}/data/setup:/setup:ro
+    # /data/regtest is a test-only symlink to the worker-created bitcoin directory.
+    command: []
+  pool:
+    environment:
+      NodeSetup__WorkerEnabled: "true"
+    volumes: !override
+      - ${APP_DATA_DIR}/data/pool:/data
+      - ${APP_DATA_DIR}/data/setup:/setup:ro
+      - ${APP_DATA_DIR}/data/requests:/requests
+      - ${APP_DATA_DIR}/data/status:/status:ro
+  setup-worker:
+    image: hashforge-setup-worker:ci
+    pull_policy: never
+    user: "1000:1000"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - ${APP_DATA_DIR}/data/requests:/requests:ro
+      - ${APP_DATA_DIR}/data/status:/status
+      - ${APP_DATA_DIR}/data/setup:/setup
+      - ${APP_DATA_DIR}/data/destination:/destination
+      - ${APP_DATA_DIR}/data/source/regtest:/snapshot:ro

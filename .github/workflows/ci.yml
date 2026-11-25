@@ -65,3 +65,19 @@ jobs:
           docker build -t hashforge-managed-bitcoind:ci "$RUNNER_TEMP/hashforge-core/docker/bitcoind"
       - name: Managed setup smoke test
         run: SMOKE_MANAGED_SETUP=1 tests/smoke.sh
+
+  worker-import:
+    name: Browser-requested blockchain import (regtest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build pinned fork images and worker
+        run: |
+          git clone https://github.com/SoggyHammyDev/HashForge.git "$RUNNER_TEMP/hashforge-core"
+          git -C "$RUNNER_TEMP/hashforge-core" checkout --detach 26d667ba5b150259ac989ee5b0aa19dde85de68e
+          docker build -t hashforge-managed-pool:ci "$RUNNER_TEMP/hashforge-core"
+          docker build -t hashforge-managed-bitcoind:ci "$RUNNER_TEMP/hashforge-core/docker/bitcoind"
+          docker build -f "$RUNNER_TEMP/hashforge-core/tools/node/Dockerfile.worker" -t hashforge-setup-worker:ci "$RUNNER_TEMP/hashforge-core/tools/node"
+      - name: Browser import smoke test
+        run: SMOKE_MANAGED_SETUP=1 SMOKE_WORKER_IMPORT=1 tests/smoke.sh
