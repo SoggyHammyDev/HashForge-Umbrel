@@ -1,0 +1,5 @@
+# Local test data; nothing here belongs in the repository.
+*.log
+.vscode/
+.idea/
+tests/.pool-image.yml
