@@ -1,0 +1,3 @@
+# Experimental standalone package
+
+Do not deploy to production yet. This branch uses a local Bitcoin Core image build, a dedicated archival data directory and generated RPC credentials. No host RPC or ZMQ ports are published. The default node can still reach other services on the Umbrel network; authentication protects RPC, but ZMQ isolation needs hardening before release. The existing pool image is unchanged. The smoke test overrides the network to regtest. A publishable multiarchitecture image, setup UI, import integration and real Umbrel tests remain required. Do not upgrade a production installation from this branch.

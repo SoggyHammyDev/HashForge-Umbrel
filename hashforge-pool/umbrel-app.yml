@@ -4,7 +4,7 @@ storage:
   dataRoot: data
 category: bitcoin
 name: HashForge
-version: "0.1.1"
+version: "0.1.2-dev"
 tagline: Run your own Bitcoin mining pool, solo or shared
 description: >-
   HashForge is an open-source Bitcoin mining pool that runs on your own node. Point your miners at your
@@ -12,7 +12,7 @@ description: >-
   itself, straight to the miner's own Bitcoin address. The pool never holds anyone's bitcoin.
 
 
-  On umbrelOS, HashForge connects to your Bitcoin Node app automatically and starts with a solo pool
+  On umbrelOS, HashForge runs its own Bitcoin Core node and starts with a solo pool
   that charges no fee. Open the app, go to the Connect page, and point your miner at the address shown
   there, using your own Bitcoin address as the user name. Mining begins once your node has finished
   synchronising.
@@ -35,12 +35,11 @@ description: >-
   On umbrelOS a shared pool pays at most ten miners in each block, the ten with the most work, so that
   its blocks always fit within the space your Bitcoin node reserves for them.
 releaseNotes: >-
-  Worker names can now use letters and digits from any language, so a name like Gårdsrigg is accepted.
+  Experimental standalone node package. Requires a local image build; not yet an app store release.
 
 developer: Owen Ashurst
 website: https://github.com/owenashurst/HashForge
-dependencies:
-  - bitcoin
+dependencies: []
 repo: https://github.com/owenashurst/HashForge
 support: https://github.com/owenashurst/HashForge/issues
 

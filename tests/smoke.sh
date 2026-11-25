@@ -13,7 +13,7 @@ export SMOKE_WEB_PORT="${2:-18343}"
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 app="hashforge-pool"
 # A folder inside Docker's own machine rather than this one, so file ownership behaves as it does on an Umbrel.
-data="/var/tmp/hashforge-umbrel-smoke"
+data="/var/tmp/hashforge-umbrel-smoke-$"
 
 # Stops Git Bash on Windows from rewriting the container paths below; it means nothing elsewhere.
 export MSYS_NO_PATHCONV=1
@@ -22,11 +22,7 @@ export MSYS_NO_PATHCONV=1
 export APP_DATA_DIR="$data"
 export DEVICE_DOMAIN_NAME="umbrel.local"
 export NETWORK_IP="10.21.0.0"
-export APP_BITCOIN_NODE_IP="bitcoin"
-export APP_BITCOIN_RPC_PORT="8332"
-export APP_BITCOIN_RPC_USER="umbrel"
-export APP_BITCOIN_RPC_PASS="smoke-test-rpc-password"
-export APP_BITCOIN_ZMQ_HASHBLOCK_PORT="28332"
+export APP_HASHFORGE_POOL_RPC_PASSWORD="smoke-test-rpc-password"
 export APP_HASHFORGE_POOL_POSTGRES_PASSWORD="smoke-test-postgres-password"
 export APP_HASHFORGE_POOL_REDIS_PASSWORD="smoke-test-redis-password"
 export SMOKE_BITCOIN_IMAGE="${SMOKE_BITCOIN_IMAGE:-hashforge-bitcoind}"
@@ -75,9 +71,9 @@ wait_for_pool() {
 }
 
 # umbrelOS hands the app its data folders owned by user 1000, which is who the services run as.
-in_data_folder "mkdir -p $data/data/pool $data/data/postgres $data/data/redis && chown -R 1000:1000 $data"
+in_data_folder "mkdir -p $data/data/pool $data/data/postgres $data/data/redis $data/data/bitcoin && chown -R 1000:1000 $data"
 
-started="$(compose up --detach 2>&1)" || fail "the services did not start: $started"
+started="$(compose up --detach --build 2>&1)" || fail "the services did not start: $started"
 echo "Waiting for the pool to answer on port ${SMOKE_WEB_PORT}"
 wait_for_pool || fail "the pool did not answer within three minutes"
 
@@ -110,7 +106,7 @@ grep --quiet --invert-match '^1000$' <<< "$owners" && fail "data was written by 
 # A restart recreates the containers, as an Umbrel restart or update does; the data must still be there.
 keys_before="$(in_data_folder "ls $data/data/pool/.aspnet/DataProtection-Keys" 2>&1)" || fail "the pool stored no keys: $keys_before"
 compose down > /dev/null 2>&1
-started="$(compose up --detach 2>&1)" || fail "the services did not restart: $started"
+started="$(compose up --detach --build 2>&1)" || fail "the services did not restart: $started"
 wait_for_pool || fail "the pool did not come back after a restart"
 keys_after="$(in_data_folder "ls $data/data/pool/.aspnet/DataProtection-Keys")"
 [ "$keys_before" = "$keys_after" ] || fail "the pool's keys changed over a restart"

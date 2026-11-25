@@ -7,14 +7,11 @@ services:
     image: busybox:1.37
     command: ["sleep", "infinity"]
 
-  # Stands in for the Bitcoin Node app, on a private chain that needs no synchronising.
+  # Override the integrated node to use an isolated test chain.
   bitcoin:
-    image: ${SMOKE_BITCOIN_IMAGE}
     environment:
       NETWORK: regtest
       PRUNE_MB: 0
-      RPC_USER: ${APP_BITCOIN_RPC_USER}
-      RPC_PASSWORD: ${APP_BITCOIN_RPC_PASS}
 
   pool:
     # Under umbrelOS the web interface is reached through its proxy; here it is published for the checks.
