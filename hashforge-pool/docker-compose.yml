@@ -20,8 +20,9 @@ services:
     volumes:
       - ${APP_DATA_DIR}/data/bitcoin:/data
     networks:
-      - node_private
-      - default
+      node_private:
+        aliases:
+          - hashforge-bitcoin
 
   pool:
     # Replace the tag and digest together when releasing; see the repository README.
@@ -54,11 +55,11 @@ services:
     environment:
       HOME: /data
       # Dedicated Bitcoin Core service; RPC and ZMQ are not published to the host.
-      BitcoinNode__RpcUrl: "http://bitcoin:8332/"
+      BitcoinNode__RpcUrl: "http://hashforge-bitcoin:8332/"
       BitcoinNode__RpcUser: hashforge
       BitcoinNode__RpcPassword: ${APP_HASHFORGE_POOL_RPC_PASSWORD}
       # The node announces each new block here, so miners switch work without delay.
-      BitcoinNode__ZmqBlockUrl: "tcp://bitcoin:28332"
+      BitcoinNode__ZmqBlockUrl: "tcp://hashforge-bitcoin:28332"
       Persistence__RedisConnectionString: "hashforge-pool_redis_1:6379,password=${APP_HASHFORGE_POOL_REDIS_PASSWORD}"
       Persistence__PostgresConnectionString: "Host=hashforge-pool_db_1;Database=hashforge;Username=hashforge;Password=${APP_HASHFORGE_POOL_POSTGRES_PASSWORD}"
       Mining__CoinbaseTag: "/HashForge/"

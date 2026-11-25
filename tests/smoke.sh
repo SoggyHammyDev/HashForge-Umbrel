@@ -77,6 +77,21 @@ started="$(compose up --detach --build 2>&1)" || fail "the services did not star
 echo "Waiting for the pool to answer on port ${SMOKE_WEB_PORT}"
 wait_for_pool || fail "the pool did not answer within three minutes"
 
+# The node must have exactly one network, distinct from the shared app network.
+node_id="$(compose ps -q bitcoin)"
+test -n "$node_id" || fail "Bitcoin container is missing"
+network_count="$(docker inspect --format '{{len .NetworkSettings.Networks}}' "$node_id")"
+[ "$network_count" = 1 ] || fail "Bitcoin node is attached to an unexpected network"
+node_network="$(docker inspect --format '{{range $name, $settings := .NetworkSettings.Networks}}{{$name}}{{end}}' "$node_id")"
+case "$node_network" in
+    *_node_private) ;;
+    *) fail "Bitcoin node is not on its dedicated network: $node_network" ;;
+esac
+# The dedicated bridge is deliberately not internal: mainnet requires outbound peer access.
+# No RPC, ZMQ or P2P host port is needed for outbound synchronization.
+published="$(docker port "$node_id")"
+[ -z "$published" ] || fail "Bitcoin node unexpectedly publishes host ports"
+
 pools="$(curl --silent --fail --max-time 10 "http://127.0.0.1:${SMOKE_WEB_PORT}/api/pools")"
 grep --quiet '"solo"' <<< "$pools" || fail "the solo pool is missing from /api/pools: $pools"
 
