@@ -50,3 +50,18 @@ jobs:
 
       - name: Smoke test
         run: tests/smoke.sh
+
+  managed-setup:
+    name: Web setup before Bitcoin Core (regtest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build pinned fork images
+        run: |
+          git clone https://github.com/SoggyHammyDev/HashForge.git "$RUNNER_TEMP/hashforge-core"
+          git -C "$RUNNER_TEMP/hashforge-core" checkout --detach 14598bcbedc1f054adcf764eda71f70646c4306d
+          docker build -t hashforge-managed-pool:ci "$RUNNER_TEMP/hashforge-core"
+          docker build -t hashforge-managed-bitcoind:ci "$RUNNER_TEMP/hashforge-core/docker/bitcoind"
+      - name: Managed setup smoke test
+        run: SMOKE_MANAGED_SETUP=1 tests/smoke.sh

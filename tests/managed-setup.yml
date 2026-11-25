@@ -1,0 +1,26 @@
+# Experimental overlay for the locally built fork images only.
+# Never use this with a production data directory or the upstream pool image.
+services:
+  bitcoin:
+    image: hashforge-managed-bitcoind:ci
+    build: !reset null
+    pull_policy: never
+    environment:
+      HASHFORGE_SETUP_GATE: "1"
+    volumes:
+      - ${APP_DATA_DIR}/data/setup:/setup:ro
+  pool:
+    image: hashforge-managed-pool:ci
+    pull_policy: never
+    depends_on: !override
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NodeSetup__Enabled: "true"
+      NodeSetup__Token: ${APP_HASHFORGE_POOL_SETUP_TOKEN:?setup token required}
+      Admin__AllowedNetworks__0: "172.16.0.0/12"
+      Admin__AllowedNetworks__1: "127.0.0.0/8"
+    volumes:
+      - ${APP_DATA_DIR}/data/setup:/setup

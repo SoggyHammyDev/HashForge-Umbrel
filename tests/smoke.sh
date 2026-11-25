@@ -30,6 +30,10 @@ export SMOKE_BITCOIN_IMAGE="${SMOKE_BITCOIN_IMAGE:-hashforge-bitcoind}"
 # Paths are given relative to the repository so that they mean the same to Docker on every system.
 cd "$repo"
 files=(--file "$app/docker-compose.yml" --file "tests/umbrel-stand-in.yml")
+if [ "${SMOKE_MANAGED_SETUP:-0}" = 1 ]; then
+    files+=(--file "tests/managed-setup.yml")
+    export APP_HASHFORGE_POOL_SETUP_TOKEN="test-only-setup-token-with-at-least-32-characters"
+fi
 if [ -n "$pool_image" ]; then
     override="tests/.pool-image.yml"
     printf 'services:\n  pool:\n    image: %s\n' "$pool_image" > "$override"
@@ -56,7 +60,7 @@ cleanup
 # match can make the command feeding it fail, which would report a failure that did not happen.
 fail() {
     echo "FAILED: $*" >&2
-    compose logs --tail 60 pool db redis >&2 || true
+    compose logs --tail 60 bitcoin pool db redis >&2 || true
     exit 1
 }
 
@@ -71,11 +75,22 @@ wait_for_pool() {
 }
 
 # umbrelOS hands the app its data folders owned by user 1000, which is who the services run as.
-in_data_folder "mkdir -p $data/data/pool $data/data/postgres $data/data/redis $data/data/bitcoin && chown -R 1000:1000 $data"
+in_data_folder "mkdir -p $data/data/pool $data/data/postgres $data/data/redis $data/data/bitcoin $data/data/setup && chown -R 1000:1000 $data"
 
 started="$(compose up --detach --build 2>&1)" || fail "the services did not start: $started"
 echo "Waiting for the pool to answer on port ${SMOKE_WEB_PORT}"
 wait_for_pool || fail "the pool did not answer within three minutes"
+
+if [ "${SMOKE_MANAGED_SETUP:-0}" = 1 ]; then
+    [ -z "$(in_data_folder "ls -A $data/data/bitcoin")" ] || fail "Bitcoin wrote data before setup approval"
+    python3 tests/approve_web_setup.py "http://127.0.0.1:${SMOKE_WEB_PORT}/admin/node-setup" "$APP_HASHFORGE_POOL_SETUP_TOKEN" || fail "Web setup approval failed"
+    [ "$(in_data_folder "cat $data/data/setup/decision")" = fresh ] || fail "Setup decision was not persisted"
+    for _ in $(seq 1 90); do
+        if compose exec -T bitcoin healthcheck.sh; then break; fi
+        sleep 2
+    done
+    compose exec -T bitcoin healthcheck.sh || fail "Bitcoin did not start after approval"
+fi
 
 # The node must have exactly one network, distinct from the shared app network.
 node_id="$(compose ps -q bitcoin)"
