@@ -8,7 +8,7 @@ services:
 
   pool:
     # Replace the tag and digest together when releasing; see the repository README.
-    image: ghcr.io/owenashurst/hashforge:0.1.0@sha256:0000000000000000000000000000000000000000000000000000000000000000
+    image: ghcr.io/owenashurst/hashforge:0.1.0@sha256:c48d76b4a85e14aad720e71b76bd85076c4f6dc93d7841102f669862ed3e03a2
     user: "1000:1000"
     restart: on-failure
     stop_grace_period: 30s
